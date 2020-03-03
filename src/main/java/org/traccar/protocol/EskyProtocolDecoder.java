@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 - 2018 Anton Tananaev (anton@traccar.org)
+ * Copyright 2017 - 2020 Anton Tananaev (anton@traccar.org)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,12 @@
 package org.traccar.protocol;
 
 import io.netty.channel.Channel;
+import io.netty.channel.socket.DatagramChannel;
 import org.traccar.BaseProtocolDecoder;
 import org.traccar.DeviceSession;
+import org.traccar.NetworkMessage;
 import org.traccar.Protocol;
+import org.traccar.helper.BitUtil;
 import org.traccar.helper.Parser;
 import org.traccar.helper.PatternBuilder;
 import org.traccar.helper.UnitsConverter;
@@ -35,7 +38,7 @@ public class EskyProtocolDecoder extends BaseProtocolDecoder {
 
     private static final Pattern PATTERN = new PatternBuilder()
             .expression("..;")                   // header
-            .number("d+;")                       // index
+            .number("(d+);")                     // index
             .number("(d+);")                     // imei
             .text("R;")                          // data type
             .number("(d+)[+;]")                  // satellites
@@ -63,6 +66,11 @@ public class EskyProtocolDecoder extends BaseProtocolDecoder {
             return null;
         }
 
+        int index = parser.nextInt();
+        if (channel instanceof DatagramChannel) {
+            channel.writeAndFlush(new NetworkMessage("ACK," + index + "#", remoteAddress));
+        }
+
         DeviceSession deviceSession = getDeviceSession(channel, remoteAddress, parser.next());
         if (deviceSession == null) {
             return null;
@@ -81,7 +89,10 @@ public class EskyProtocolDecoder extends BaseProtocolDecoder {
         position.setCourse(parser.nextDouble());
 
         if (parser.hasNext(3)) {
-            position.set(Position.KEY_INPUT, parser.nextHexInt());
+            int input = parser.nextHexInt();
+            position.set(Position.KEY_IGNITION, !BitUtil.check(input, 0));
+            position.set(Position.PREFIX_IN + 1, !BitUtil.check(input, 1));
+            position.set(Position.PREFIX_IN + 2, !BitUtil.check(input, 2));
             position.set(Position.KEY_EVENT, parser.nextInt());
             position.set(Position.KEY_ODOMETER, parser.nextInt());
         }
